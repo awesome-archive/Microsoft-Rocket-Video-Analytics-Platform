@@ -19,19 +19,19 @@ namespace TFDetector
     public class FrameDNNTF
     {
         private static int _imageWidth, _imageHeight, _index;
-        private static List<Tuple<string, int[]>> _lines;
-        private static Dictionary<string, int> _category;
+        private static List<(string key, (System.Drawing.Point p1, System.Drawing.Point p2) coordinates)> _lines;
+        private static HashSet<string> _category;
 
         TFWrapper tfWrapper = new TFWrapper();
         byte[] imageByteArray;
         Brush bboxColor = Brushes.Green;
 
-        public FrameDNNTF(List<Tuple<string, int[]>> lines)
+        public FrameDNNTF(List<(string key, (System.Drawing.Point p1, System.Drawing.Point p2) coordinates)> lines)
         {
             _lines = lines;
         }
 
-        public List<Item> Run(Mat frameTF, int frameIndex, Dictionary<string, int> category, Brush bboxColor, double min_score_for_linebbox_overlap)
+        public List<Item> Run(Mat frameTF, int frameIndex, HashSet<string> category, Brush bboxColor, double min_score_for_linebbox_overlap)
         {
             _imageWidth = frameTF.Width;
             _imageHeight = frameTF.Height;
@@ -50,7 +50,7 @@ namespace TFDetector
             {
                 for (int lineID = 0; lineID < _lines.Count; lineID++)
                 {
-                    var overlapItems = preValidItems.Select(o => new { Overlap = Utils.Utils.checkLineBboxOverlapRatio(_lines[lineID].Item2, o.X, o.Y, o.Width, o.Height), Bbox_x = o.X + o.Width, Bbox_y = o.Y + o.Height, Distance = this.Distance(_lines[lineID].Item2, o.Center()), Item = o })
+                    var overlapItems = preValidItems.Select(o => new { Overlap = Utils.Utils.checkLineBboxOverlapRatio(_lines[lineID].coordinates, o.X, o.Y, o.Width, o.Height), Bbox_x = o.X + o.Width, Bbox_y = o.Y + o.Height, Distance = this.Distance(_lines[lineID].coordinates, o.Center()), Item = o })
                         .Where(o => o.Bbox_x <= _imageWidth && o.Bbox_y <= _imageHeight && o.Overlap >= min_score_for_linebbox_overlap).OrderBy(o => o.Distance);
                     foreach (var item in overlapItems)
                     {
@@ -99,7 +99,7 @@ namespace TFDetector
 
                     int value = Convert.ToInt32(classes[i, j]);
                     CatalogItem catalogItem = TFWrapper._catalog.FirstOrDefault(item => item.Id == value);
-                    if (!_category.ContainsKey(catalogItem.DisplayName)) continue;
+                    if (_category.Count > 0 && !_category.Contains(catalogItem.DisplayName)) continue;
 
                     for (int k = 0; k < z; k++)
                     {
@@ -127,10 +127,10 @@ namespace TFDetector
                     //check line overlap
                     for (int lineID = 0; lineID < _lines.Count; lineID++)
                     {
-                        float ratio = Utils.Utils.checkLineBboxOverlapRatio(_lines[lineID].Item2, bbox_x, bbox_y, bbox_w, bbox_h);
+                        float ratio = Utils.Utils.checkLineBboxOverlapRatio(_lines[lineID].coordinates, bbox_x, bbox_y, bbox_w, bbox_h);
                         if (ratio >= DNNConfig.MIN_SCORE_FOR_LINEBBOX_OVERLAP_SMALL)
                         {
-                            Item it = new Item(bbox_x, bbox_y, bbox_w, bbox_h, catalogItem.Id, catalogItem.DisplayName, scores[i, j], lineID, _lines[lineID].Item1);
+                            Item it = new Item(bbox_x, bbox_y, bbox_w, bbox_h, catalogItem.Id, catalogItem.DisplayName, scores[i, j], lineID, _lines[lineID].key);
                             it.TaggedImageData = Utils.Utils.DrawImage(imageByteArray, bbox_x, bbox_y, bbox_w, bbox_h, bboxColor);
                             it.CroppedImageData = Utils.Utils.CropImage(imageByteArray, bbox_x, bbox_y, bbox_w, bbox_h);
                             frameDNNItem.Add(it);
@@ -143,9 +143,9 @@ namespace TFDetector
             return frameDNNItem;
         }
 
-        private double Distance(int[] line, System.Drawing.Point bboxCenter)
+        private double Distance((System.Drawing.Point p1, System.Drawing.Point p2) line, System.Drawing.Point bboxCenter)
         {
-            System.Drawing.Point p1 = new System.Drawing.Point((int)((line[0] + line[2]) / 2), (int)((line[1] + line[3]) / 2));
+            System.Drawing.Point p1 = new System.Drawing.Point((int)((line.p1.X + line.p2.X) / 2), (int)((line.p1.Y + line.p2.Y) / 2));
             return Math.Sqrt(this.Pow2(bboxCenter.X - p1.X) + Pow2(bboxCenter.Y - p1.Y));
         }
 
